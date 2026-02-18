@@ -112,6 +112,8 @@ private struct SlotSidebarRow: View {
     let assignment: SlotAssignment?
     let isSelected: Bool
 
+    @State private var isHovering: Bool = false
+
     var body: some View {
         HStack(spacing: 6) {
             if let assignment {
@@ -151,12 +153,25 @@ private struct SlotSidebarRow: View {
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
         .background {
+            // Selected state (assigned only)
             if isSelected, assignment != nil {
                 RoundedRectangle(cornerRadius: UI.sidebarSelectionCornerRadius, style: .continuous)
                     .fill(Color.accentColor.opacity(UI.sidebarSelectionFillOpacity))
+            } else if isHovering {
+                // Subtle hover state
+                RoundedRectangle(cornerRadius: UI.sidebarSelectionCornerRadius, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
             }
         }
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
     }
 }
 
