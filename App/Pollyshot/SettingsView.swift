@@ -242,9 +242,6 @@ private struct SlotDetailEditor: View {
                                 loadFromAssignment(nil)
                             }
                             .cursorOnHover(.pointingHand)
-
-                            Toggle("Enabled", isOn: $isEnabled)
-                                .toggleStyle(.switch)
                         }
 
                         LabeledContent("Name") {
@@ -256,6 +253,12 @@ private struct SlotDetailEditor: View {
                             TextField("com.example.App", text: $bundleID)
                                 .disableAutocorrection(true)
                                 .frame(maxWidth: .infinity)
+                        }
+
+                        HStack {
+                            Spacer()
+                            Toggle("Enabled", isOn: $isEnabled)
+                                .toggleStyle(.switch)
                         }
 
                         if isMissing {
