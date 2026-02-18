@@ -1,4 +1,3 @@
-//
 //  PollyshotApp.swift
 //  Pollyshot
 //
@@ -9,6 +8,69 @@
 
 import SwiftUI
 import AppKit
+
+private struct SettingsTitleView: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Pollyshot")
+                .font(.headline)
+                .fontWeight(.semibold)
+
+            Text("(Beta)")
+                .font(.headline)
+                .fontWeight(.regular)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private final class SettingsWindowController {
+    static let shared = SettingsWindowController()
+
+    private var window: NSWindow?
+
+    private init() {}
+
+    func show<Content: View>(rootView: Content, title: String = "Settings") {
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hosting = NSHostingController(rootView: rootView)
+        let window = NSWindow(contentViewController: hosting)
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        // 10 fixed slots: reduce vertical size to avoid dead space
+        window.setContentSize(NSSize(width: 680, height: 320))
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        // Keep a real window title to avoid showing "Untitled" in some configurations,
+        // but hide it visually via `titleVisibility = .hidden`.
+        window.title = "Pollyshot (Beta)"
+
+        // Custom title view: "Pollyshot" + lighter "(Beta)".
+        let titleView = NSHostingView(rootView: SettingsTitleView())
+        titleView.translatesAutoresizingMaskIntoConstraints = false
+
+        if let titlebarView = window.standardWindowButton(.closeButton)?.superview {
+            titlebarView.addSubview(titleView)
+
+            NSLayoutConstraint.activate([
+                titleView.centerXAnchor.constraint(equalTo: titlebarView.centerXAnchor),
+                titleView.centerYAnchor.constraint(equalTo: titlebarView.centerYAnchor),
+            ])
+        }
+
+        self.window = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
 
 @main
 struct PollyshotApp: App {
@@ -68,6 +130,8 @@ struct PollyshotApp: App {
             }
         }
 
+        // Keep the Settings scene so Cmd+, and the standard app menu can still work when it does.
+        // We also provide an explicit NSWindow-based Settings window for reliability from MenuBarExtra.
         Settings {
             SettingsView()
                 .environmentObject(slotStore)
@@ -75,9 +139,17 @@ struct PollyshotApp: App {
         }
     }
 
+    private func openSettingsReliably() {
+        // Use an explicit NSWindow so Settings always opens from a menu bar app.
+        SettingsWindowController.shared.show(
+            rootView: SettingsView().environmentObject(slotStore),
+            title: "Pollyshot Settings"
+        )
+    }
+
     private func settingsButton() -> some View {
         Button("Settings…") {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            openSettingsReliably()
         }
         .keyboardShortcut(",", modifiers: [.command])
     }

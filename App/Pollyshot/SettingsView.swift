@@ -2,234 +2,246 @@
 //  SettingsView.swift
 //  Pollyshot
 //
-//  Dedicated settings UI for editing stable shortcut slots (Cmd + Option + Shift + 1..9,0).
-//  Slots are stable: clearing Slot 2 does not renumber Slot 3/4/etc.
-//
-//  This view expects a SlotStore to be injected via `.environmentObject(SlotStore())`.
-//
-//
+//  Simplified Settings UI:
+//  - Sidebar: shows app icon + app name when assigned; "Choose App…" placeholder is lighter
+//  - Disabled: uses strikethrough styling (no "Disabled" label)
+//  - Shortcuts: always secondary style
+//  - Selecting an empty slot opens the app picker immediately
+//  - Detail: if empty shows only "Choose App…"; if assigned shows actions row above fields
+//  - Clear slot: destructive, right-aligned
+//  - Enabled: switch toggle style
 
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+private enum UI {
+    static let sidebarMinWidth: CGFloat = 240
+    static let detailMaxWidth: CGFloat = 560
+    static let sidebarSelectionFillOpacity: CGFloat = 0.22
+    static let sidebarSelectionCornerRadius: CGFloat = 10
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var store: SlotStore
-
     @State private var selection: ShortcutSlot? = .one
 
     var body: some View {
-        HStack(spacing: 0) {
-            List(selection: $selection) {
-                Section("Shortcut Slots") {
-                    ForEach(ShortcutSlot.allInHotkeyOrder) { slot in
-                        SlotRow(slot: slot, assignment: store.assignment(for: slot))
-                            .tag(slot as ShortcutSlot?)
+        NavigationSplitView {
+            List(ShortcutSlot.allInHotkeyOrder, selection: $selection) { slot in
+                Button {
+                    selection = slot
+                    if store.assignment(for: slot) == nil {
+                        // Open the picker immediately for empty slots.
+                        NotificationCenter.default.post(
+                            name: .pollyshotOpenPickerForSlot,
+                            object: nil,
+                            userInfo: ["slotRawValue": slot.rawValue]
+                        )
                     }
+                } label: {
+                    SlotSidebarRow(
+                        slot: slot,
+                        assignment: store.assignment(for: slot),
+                        isSelected: selection == slot
+                    )
                 }
+                .buttonStyle(.plain)
+                .tag(slot as ShortcutSlot?)
             }
             .listStyle(.sidebar)
-            .frame(minWidth: 260)
-
-            Divider()
-
+            .frame(minWidth: UI.sidebarMinWidth)
+        } detail: {
             if let slot = selection {
-                SlotEditor(slot: slot, assignment: store.assignment(for: slot)) { newAssignment in
-                    if let a = newAssignment {
-                        store.set(a)
-                    } else {
-                        store.clear(slot: slot)
-                    }
+                ScrollView {
+                    SlotDetailEditor(
+                        slot: slot,
+                        assignment: store.assignment(for: slot),
+                        onChange: { updated in
+                            if let updated {
+                                store.set(updated)
+                            } else {
+                                store.clear(slot: slot)
+                            }
+                        }
+                    )
+                    .frame(maxWidth: UI.detailMaxWidth, alignment: .topLeading)
+                    .padding(16)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 Text("Select a slot")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button("Refresh") {
-                    store.refreshMissingFlags()
-                }
+                    .padding(16)
             }
         }
     }
 }
 
-private struct SlotRow: View {
+private struct SlotSidebarRow: View {
     let slot: ShortcutSlot
     let assignment: SlotAssignment?
+    let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
+            if let assignment {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: NSWorkspace.shared.urlForApplication(withBundleIdentifier: assignment.bundleID)?.path ?? ""))
+                    .resizable()
+                    .frame(width: 18, height: 18)
+                    .cornerRadius(4)
+                    .opacity(assignment.isEnabled ? 1.0 : 0.7)
+            }
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(slot.displayName)
-                    .font(.headline)
-
-                if let assignment {
-                    HStack(spacing: 6) {
-                        Text(assignment.name)
-
-                        if assignment.isMissing {
-                            Text("Missing")
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        } else if !assignment.isEnabled {
-                            Text("Disabled")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Text(assignment.bundleID)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if let assignment, !assignment.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(assignment.name)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .strikethrough(!assignment.isEnabled)
                 } else {
-                    Text("Empty")
+                    Text("Choose App…")
+                        .font(.body)
                         .foregroundStyle(.secondary)
+                        .opacity(0.75)
+                }
+
+                if assignment?.isMissing == true {
+                    Text("Missing")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             Text(slot.shortcutHint)
                 .foregroundStyle(.secondary)
                 .font(.callout)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background {
+            if isSelected, assignment != nil {
+                RoundedRectangle(cornerRadius: UI.sidebarSelectionCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(UI.sidebarSelectionFillOpacity))
+            }
+        }
+        .contentShape(Rectangle())
     }
 }
 
-private struct SlotEditor: View {
+private struct SlotDetailEditor: View {
     let slot: ShortcutSlot
     let assignment: SlotAssignment?
-    var onChange: (SlotAssignment?) -> Void
+    let onChange: (SlotAssignment?) -> Void
 
     @State private var name: String = ""
     @State private var bundleID: String = ""
     @State private var isEnabled: Bool = true
-
-    @State private var validationMessage: String? = nil
+    @State private var message: String? = nil
 
     private var isMissing: Bool { assignment?.isMissing == true }
+    private var isEmpty: Bool { assignment == nil && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(slot.displayName)
-                    .font(.title2)
+        VStack(alignment: .leading, spacing: 16) {
+            header
 
-                Text("Fixed shortcut: \(slot.shortcutHint)")
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 4)
+            GroupBox {
+                VStack(alignment: .leading, spacing: 12) {
 
-            Form {
-                Section("Destination") {
-                    TextField("Name", text: $name)
-                        .onChange(of: name) { _ in pushUpdate() }
-
-                    TextField("Bundle ID", text: $bundleID)
-                        .disableAutocorrection(true)
-                        .onChange(of: bundleID) { _ in pushUpdate() }
-
-                    HStack {
-                        Button(isMissing ? "Relink App…" : "Choose App…") {
+                    // If empty: only show Choose App… and let it span full width.
+                    if assignment == nil && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Button("Choose App…") {
                             pickAppAndAutofill()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        // Actions row first
+                        HStack(spacing: 10) {
+                            Button(isMissing ? "Relink App…" : "Choose App…") {
+                                pickAppAndAutofill()
+                            }
+
+                            Button("Test") {
+                                let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard !trimmed.isEmpty else {
+                                    message = "Bundle ID is required to test."
+                                    return
+                                }
+                                HotKeyManager.shared.handleHotKeyPressed(targetBundleID: trimmed)
+                            }
+                            .disabled(bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                            Spacer()
+
+                            Toggle("Enabled", isOn: $isEnabled)
+                                .toggleStyle(.switch)
+                        }
+
+                        LabeledContent("Name") {
+                            TextField("App name", text: $name)
+                                .frame(maxWidth: .infinity)
+                        }
+
+                        LabeledContent("Bundle ID") {
+                            TextField("com.example.App", text: $bundleID)
+                                .disableAutocorrection(true)
+                                .frame(maxWidth: .infinity)
                         }
 
                         if isMissing {
-                            Text("Missing")
+                            Text("This app can’t be found. Relink it, or clear the slot.")
                                 .font(.callout)
                                 .foregroundStyle(.orange)
                         }
 
-                        Spacer()
+                        if let message {
+                            Text(message)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
 
-                        Button("Test capture") {
-                            guard !bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                                validationMessage = "Bundle ID is required to test."
-                                return
+                        Divider()
+
+                        HStack {
+                            Spacer()
+                            Button("Clear slot", role: .destructive) {
+                                onChange(nil)
+                                loadFromAssignment(nil)
                             }
-                            HotKeyManager.shared.handleHotKeyPressed(targetBundleID: bundleID)
                         }
                     }
-
-                    Toggle("Enabled", isOn: $isEnabled)
-                        .onChange(of: isEnabled) { _ in pushUpdate() }
-
-                    HStack {
-                        Button("Clear slot") {
-                            onChange(nil)
-                            loadFromAssignment(nil)
-                        }
-                        .foregroundStyle(.red)
-
-                        Spacer()
-                    }
-
-                    if let validationMessage {
-                        Text(validationMessage)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
                 }
-
-                Section("Notes") {
-                    Text(
-                        """
-                        Bundle ID examples:
-                        • Notes: com.apple.Notes
-                        • TextEdit: com.apple.TextEdit
-                        • Slack: com.tinyspeck.slackmacgap
-                        """
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-
-                    Text("If an app is uninstalled or moved, the slot will show as Missing. You can relink it later by editing the bundle ID.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Permissions") {
-                    Text(
-                        """
-                        To paste into other apps, enable Accessibility permission:
-                        System Settings → Privacy & Security → Accessibility → enable Pollyshot
-                        """
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-
-                    Text(
-                        """
-                        If interactive area capture doesn’t work, enable Screen Recording permission:
-                        System Settings → Privacy & Security → Screen Recording → enable Pollyshot
-                        """
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                }
+                .padding(12)
             }
-            .padding(.trailing, 8)
-
-            Spacer()
         }
-        .padding(16)
         .onAppear { loadFromAssignment(assignment) }
         .onChange(of: assignment) { newValue in
             loadFromAssignment(newValue)
         }
+        .onChange(of: name) { _ in pushUpdate() }
+        .onChange(of: bundleID) { _ in pushUpdate() }
+        .onChange(of: isEnabled) { _ in pushUpdate() }
+        .onReceive(NotificationCenter.default.publisher(for: .pollyshotOpenPickerForSlot)) { note in
+            guard let raw = note.userInfo?["slotRawValue"] as? Int,
+                  raw == slot.rawValue,
+                  assignment == nil else { return }
+            pickAppAndAutofill()
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(slot.shortcutHint)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private func loadFromAssignment(_ a: SlotAssignment?) {
-        validationMessage = nil
+        message = nil
         if let a {
             name = a.name
             bundleID = a.bundleID
@@ -242,18 +254,18 @@ private struct SlotEditor: View {
     }
 
     private func pushUpdate() {
-        validationMessage = nil
+        message = nil
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBundle = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Allow partial editing without forcing clears.
+        // Allow an empty editor without forcing a clear.
         if trimmedName.isEmpty && trimmedBundle.isEmpty {
             return
         }
 
-        if trimmedName.isEmpty || trimmedBundle.isEmpty {
-            validationMessage = "Name and Bundle ID are required."
+        guard !trimmedName.isEmpty, !trimmedBundle.isEmpty else {
+            message = "Name and Bundle ID are required."
             return
         }
 
@@ -280,28 +292,28 @@ private struct SlotEditor: View {
         guard response == .OK, let url = panel.url else { return }
 
         guard let bundle = Bundle(url: url) else {
-            validationMessage = "Could not read app bundle."
+            message = "Could not read app bundle."
             return
         }
 
         guard let pickedBundleID = bundle.bundleIdentifier, !pickedBundleID.isEmpty else {
-            validationMessage = "Selected app has no bundle identifier."
+            message = "Selected app has no bundle identifier."
             return
         }
 
-        // Friendly name
         let info = bundle.infoDictionary
         let displayName =
             (info?["CFBundleDisplayName"] as? String) ??
             (info?["CFBundleName"] as? String) ??
             url.deletingPathExtension().lastPathComponent
 
-        // Update fields
         name = displayName
         bundleID = pickedBundleID
-        validationMessage = nil
-
-        // Persist immediately
+        message = nil
         pushUpdate()
     }
+}
+
+private extension Notification.Name {
+    static let pollyshotOpenPickerForSlot = Notification.Name("pollyshot.openPickerForSlot")
 }
