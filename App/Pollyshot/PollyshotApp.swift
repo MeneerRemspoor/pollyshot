@@ -49,9 +49,9 @@ private final class SettingsWindowController {
         window.isReleasedWhenClosed = false
         window.center()
 
-        // Keep a real window title to avoid showing "Untitled" in some configurations,
-        // but hide it visually via `titleVisibility = .hidden`.
-        window.title = "Pollyshot (Beta)"
+        // Avoid duplicate title text in the titlebar (left title + custom title view).
+        // We'll draw our own title view, so clear the window title string.
+        window.title = ""
 
         // Custom title view: "Pollyshot" + lighter "(Beta)".
         let titleView = NSHostingView(rootView: SettingsTitleView())
@@ -60,10 +60,18 @@ private final class SettingsWindowController {
         if let titlebarView = window.standardWindowButton(.closeButton)?.superview {
             titlebarView.addSubview(titleView)
 
-            NSLayoutConstraint.activate([
-                titleView.centerXAnchor.constraint(equalTo: titlebarView.centerXAnchor),
-                titleView.centerYAnchor.constraint(equalTo: titlebarView.centerYAnchor),
-            ])
+            // Left-align in the titlebar, just to the right of the window controls.
+            if let closeButton = window.standardWindowButton(.closeButton) {
+                NSLayoutConstraint.activate([
+                    titleView.leadingAnchor.constraint(equalTo: closeButton.trailingAnchor, constant: 10),
+                    titleView.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+                ])
+            } else {
+                NSLayoutConstraint.activate([
+                    titleView.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: 60),
+                    titleView.centerYAnchor.constraint(equalTo: titlebarView.centerYAnchor),
+                ])
+            }
         }
 
         self.window = window
