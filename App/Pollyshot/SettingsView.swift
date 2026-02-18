@@ -58,26 +58,50 @@ struct SettingsView: View {
             .frame(minWidth: UI.sidebarMinWidth)
         } detail: {
             if let slot = selection {
-                ScrollView {
-                    SlotDetailEditor(
-                        slot: slot,
-                        assignment: store.assignment(for: slot),
-                        onChange: { updated in
-                            if let updated {
-                                store.set(updated)
-                            } else {
-                                store.clear(slot: slot)
+                VStack(spacing: 0) {
+                    ScrollView {
+                        SlotDetailEditor(
+                            slot: slot,
+                            assignment: store.assignment(for: slot),
+                            onChange: { updated in
+                                if let updated {
+                                    store.set(updated)
+                                } else {
+                                    store.clear(slot: slot)
+                                }
                             }
-                        }
-                    )
-                    .frame(maxWidth: UI.detailMaxWidth, alignment: .topLeading)
-                    .padding(16)
+                        )
+                        .frame(maxWidth: UI.detailMaxWidth, alignment: .topLeading)
+                        .padding(16)
+                    }
+
+                    HStack(spacing: 4) {
+                        Text("©")
+                        Link("Jeroen", destination: URL(string: "https://www.pollpoll.nl")!)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
             } else {
-                Text("Select a slot")
+                VStack(spacing: 0) {
+                    Text("Select a slot")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(16)
+
+                    HStack(spacing: 4) {
+                        Text("©")
+                        Link("Jeroen", destination: URL(string: "https://www.pollpoll.nl")!)
+                    }
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
             }
         }
     }
@@ -222,15 +246,6 @@ private struct SlotDetailEditor: View {
                 .padding(12)
             }
 
-            Spacer(minLength: 0)
-
-            HStack(spacing: 4) {
-                Text("©")
-                Link("Jeroen", destination: URL(string: "https://www.pollpoll.nl")!)
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .onAppear { loadFromAssignment(assignment) }
         .onChange(of: assignment) { newValue in
