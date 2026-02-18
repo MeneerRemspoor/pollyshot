@@ -31,14 +31,6 @@ struct SettingsView: View {
             List(ShortcutSlot.allInHotkeyOrder, selection: $selection) { slot in
                 Button {
                     selection = slot
-                    if store.assignment(for: slot) == nil {
-                        // Open the picker immediately for empty slots.
-                        NotificationCenter.default.post(
-                            name: .pollyshotOpenPickerForSlot,
-                            object: nil,
-                            userInfo: ["slotRawValue": slot.rawValue]
-                        )
-                    }
                 } label: {
                     SlotSidebarRow(
                         slot: slot,
@@ -48,6 +40,19 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .tag(slot as ShortcutSlot?)
+            }
+            .onChange(of: selection) { newSelection in
+                guard let slot = newSelection else { return }
+                guard store.assignment(for: slot) == nil else { return }
+
+                // Post after selection has updated so the detail view can receive it on the first click.
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: .pollyshotOpenPickerForSlot,
+                        object: nil,
+                        userInfo: ["slotRawValue": slot.rawValue]
+                    )
+                }
             }
             .listStyle(.sidebar)
             .frame(minWidth: UI.sidebarMinWidth)
