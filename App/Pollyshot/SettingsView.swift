@@ -87,7 +87,7 @@ struct SettingsView: View {
                             }
                         )
                         .frame(maxWidth: UI.detailMaxWidth, alignment: .topLeading)
-                        .padding(.top, 12)
+                        .padding(.top, 8)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
                     }
