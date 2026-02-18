@@ -1,57 +1,82 @@
-import Foundation
-import Carbon.HIToolbox
-import AppKit
-
-/// Represents a hotkey configuration.
-struct HotKeyConfig {
-    let keyCode: UInt32
-    let modifiers: UInt32
-    let bundleID: String?
-    let id: UInt32
-}
-
-/// Registers a global hotkey and, when triggered:
-/// 1) runs `screencapture -i -c` (interactive area screenshot to clipboard)
-/// 2) activates Apple Notes or other target app
-/// 3) pastes (Cmd+V)
+/// HotKeyManager.swift
+/// Pollyshot
+///
+/// Drives global hotkey registration from stable slot assignments (Cmd+Option+Shift+1..0).
+/// - Slots are stable: removing one does not shift others.
+/// - Only registers assigned + enabled + non-missing slots.
+/// - When triggered: interactive area capture to clipboard, activate target app, paste (Cmd+V).
 ///
 /// Permissions:
 /// - Screen Recording: may be required for `screencapture` on newer macOS versions.
-/// - Accessibility: required to synthesize Cmd+V into target app (System Settings → Privacy & Security → Accessibility).
+/// - Accessibility: required to synthesize Cmd+V into the target app.
+///
+/// Note:
+/// This file intentionally contains lightweight models (`ShortcutSlot`, `SlotAssignment`) so it can
+/// operate independently. If you already define these elsewhere, keep the definitions consistent.
+
+import Foundation
+import AppKit
+import Carbon.HIToolbox
+
+// MARK: - Slot Models (kept in sync with Settings)
+
+enum ShortcutSlot: Int, CaseIterable, Identifiable, Codable, Equatable {
+    case one = 1
+    case two = 2
+    case three = 3
+    case four = 4
+    case five = 5
+    case six = 6
+    case seven = 7
+    case eight = 8
+    case nine = 9
+    case zero = 0
+
+    var id: Int { rawValue }
+
+    static let allInHotkeyOrder: [ShortcutSlot] = [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero]
+
+    var displayNumber: String {
+        switch self {
+        case .zero: return "0"
+        default: return String(rawValue)
+        }
+    }
+}
+
+struct SlotAssignment: Identifiable, Codable, Equatable {
+    var id: ShortcutSlot { slot }
+    var slot: ShortcutSlot
+    var name: String
+    var bundleID: String
+    var isEnabled: Bool = true
+    var isMissing: Bool = false
+}
+
+// MARK: - HotKeyManager
+
 final class HotKeyManager {
     static let shared = HotKeyManager()
 
     private static let signature: OSType = OSType(0x504F4C59) // 'POLY'
 
-    private var hotKeyRefMap: [UInt32: EventHotKeyRef] = [:]
     private var handlerRef: EventHandlerRef?
+    private var hotKeyRefMap: [UInt32: EventHotKeyRef] = [:]
 
-    /// Prevent re-entrancy if the user hits the hotkey repeatedly.
+    /// Prevent re-entrancy (screenshot UI + app activation + paste).
     private let actionQueue = DispatchQueue(label: "com.pollyshot.hotkey.action", qos: .userInitiated)
     private var isRunningAction = false
 
-    /// Definitions of all hotkey configurations.
-    /// Each config has a unique ID, keyCode, modifiers, and target bundleID (nil means legacy Notes).
-    private let hotKeyConfigs: [HotKeyConfig] = [
-        // Cmd+Option+Shift+1 → Slack
-        HotKeyConfig(keyCode: UInt32(kVK_ANSI_1), modifiers: UInt32(cmdKey | optionKey | shiftKey), bundleID: "com.tinyspeck.slackmacgap", id: 1),
-        // Cmd+Option+Shift+2 → ChatGPT (modified bundleID)
-        HotKeyConfig(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | optionKey | shiftKey), bundleID: "com.openai.chat", id: 2),
-        // Cmd+Option+Shift+3 → TextEdit
-        HotKeyConfig(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | optionKey | shiftKey), bundleID: "com.apple.TextEdit", id: 3),
-        // Cmd+Option+Shift+4 → Notes
-        HotKeyConfig(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | optionKey | shiftKey), bundleID: "com.apple.Notes", id: 4),
-        
-        // Legacy configs removed/commented out:
-        // HotKeyConfig(keyCode: UInt32(kVK_ANSI_S), modifiers: UInt32(cmdKey | optionKey), bundleID: nil, id: 1),
-        // HotKeyConfig(keyCode: UInt32(kVK_ANSI_1), modifiers: UInt32(cmdKey | optionKey), bundleID: "com.apple.Notes", id: 2),
-        // HotKeyConfig(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | optionKey), bundleID: "com.apple.TextEdit", id: 3),
-        // HotKeyConfig(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | optionKey), bundleID: "com.tinyspeck.slackmacgap", id: 4),
-        // HotKeyConfig(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | optionKey), bundleID: "com.openai.ChatGPT", id: 5)
-    ]
+    /// Latest slot configuration used for routing hotkeys.
+    /// Keyed by slot; used by the hotkey handler to resolve bundle IDs.
+    private var assignmentsBySlot: [ShortcutSlot: SlotAssignment] = [:]
 
     private init() {}
 
+    // MARK: Public API
+
+    /// Call once at startup to install the event handler.
+    /// You still must call `applySlots(_:)` to actually register hotkeys.
     func register() {
         guard handlerRef == nil else { return }
 
@@ -68,27 +93,25 @@ final class HotKeyManager {
             nil,
             &handlerRef
         )
+    }
 
-        // Register all hotkeys from hotKeyConfigs
-        for config in hotKeyConfigs {
-            let id = EventHotKeyID(signature: HotKeyManager.signature, id: config.id)
-            var ref: EventHotKeyRef?
+    /// Updates slot assignments and re-registers global hotkeys accordingly.
+    /// Only registers slots that are assigned + enabled + non-missing.
+    @MainActor
+    func applySlots(_ assignments: [ShortcutSlot: SlotAssignment]) {
+        assignmentsBySlot = assignments
+        reregisterHotKeys()
+    }
 
-            let status = RegisterEventHotKey(
-                config.keyCode,
-                config.modifiers,
-                id,
-                GetApplicationEventTarget(),
-                0,
-                &ref
-            )
-            if status == noErr, let ref = ref {
-                hotKeyRefMap[config.id] = ref
-            } else {
-                NSLog("Pollyshot: Failed to register hotkey id \(config.id) keyCode \(config.keyCode) modifiers \(config.modifiers)")
-            }
+    /// Programmatic trigger for menu buttons / tests.
+    func handleHotKeyPressed(targetBundleID: String) {
+        actionQueue.async { [weak self] in
+            guard let self else { return }
+            self.captureActivatePaste(targetBundleID: targetBundleID)
         }
     }
+
+    // MARK: HotKey event handler
 
     private static let hotKeyHandler: @convention(c) (EventHandlerCallRef?, EventRef?, UnsafeMutableRawPointer?) -> OSStatus = { _, event, _ in
         guard let event else { return noErr }
@@ -104,84 +127,144 @@ final class HotKeyManager {
             &hk
         )
 
-        if status == noErr, hk.signature == HotKeyManager.signature {
-            DispatchQueue.main.async {
-                HotKeyManager.shared.handleHotKeyID(hk.id)
-            }
+        guard status == noErr, hk.signature == HotKeyManager.signature else { return noErr }
+
+        DispatchQueue.main.async {
+            HotKeyManager.shared.handleHotKeyID(hk.id)
         }
 
         return noErr
     }
 
     private func handleHotKeyID(_ id: UInt32) {
-        guard let config = hotKeyConfigs.first(where: { $0.id == id }) else {
+        guard let slot = slotForHotKeyID(id) else {
             NSLog("Pollyshot: unknown hotkey id \(id) triggered")
             return
         }
 
-        if let bundleID = config.bundleID {
-            handleHotKeyPressed(targetBundleID: bundleID)
-        } else {
-            handleHotKeyPressed()
+        guard let assignment = assignmentsBySlot[slot] else {
+            // Empty slot should not be registered, but guard anyway.
+            NSLog("Pollyshot: hotkey \(slot.displayNumber) triggered but slot is empty")
+            return
+        }
+
+        guard assignment.isEnabled, !assignment.isMissing else {
+            NSLog("Pollyshot: hotkey \(slot.displayNumber) triggered but slot is disabled/missing")
+            return
+        }
+
+        handleHotKeyPressed(targetBundleID: assignment.bundleID)
+    }
+
+    // MARK: Registration
+
+    @MainActor
+    private func reregisterHotKeys() {
+        unregisterAllHotKeys()
+
+        let modifiers: UInt32 = UInt32(cmdKey | optionKey | shiftKey)
+
+        for slot in ShortcutSlot.allInHotkeyOrder {
+            guard let assignment = assignmentsBySlot[slot] else { continue }
+            guard assignment.isEnabled, !assignment.isMissing else { continue }
+
+            let hotKeyID = hotKeyIDForSlot(slot)
+            var ref: EventHotKeyRef?
+
+            let status = RegisterEventHotKey(
+                keyCodeForSlot(slot),
+                modifiers,
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &ref
+            )
+
+            if status == noErr, let ref {
+                hotKeyRefMap[hotKeyID.id] = ref
+            } else {
+                NSLog("Pollyshot: failed to register hotkey for slot \(slot.displayNumber) (status=\(status))")
+            }
         }
     }
 
-    public func handleHotKeyPressed() {
-        actionQueue.async { [weak self] in
-            guard let self else { return }
-            guard !self.isRunningAction else {
-                NSLog("Pollyshot: action already running; ignoring hotkey press")
-                return
-            }
-            self.isRunningAction = true
-            defer { self.isRunningAction = false }
+    @MainActor
+    private func unregisterAllHotKeys() {
+        for (_, ref) in hotKeyRefMap {
+            UnregisterEventHotKey(ref)
+        }
+        hotKeyRefMap.removeAll()
+    }
 
-            NSLog("Pollyshot: hotkey triggered — starting interactive screenshot")
-            let screenshotOK = self.runInteractiveScreenshotToClipboard()
-            if !screenshotOK {
-                NSLog("Pollyshot: screenshot command failed or was cancelled")
-                return
-            }
+    private func hotKeyIDForSlot(_ slot: ShortcutSlot) -> EventHotKeyID {
+        EventHotKeyID(signature: Self.signature, id: hotKeyIDValueForSlot(slot))
+    }
 
-            // Give the clipboard a brief moment to update before pasting.
-            Thread.sleep(forTimeInterval: 0.25)
-
-            self.activateNotes()
-
-            // Wait longer for Notes to become frontmost and ready for Cmd+V. Increase if paste sometimes fails.
-            Thread.sleep(forTimeInterval: 1.0)
-
-            self.paste()
+    private func slotForHotKeyID(_ id: UInt32) -> ShortcutSlot? {
+        switch id {
+        case 1: return .one
+        case 2: return .two
+        case 3: return .three
+        case 4: return .four
+        case 5: return .five
+        case 6: return .six
+        case 7: return .seven
+        case 8: return .eight
+        case 9: return .nine
+        case 10: return .zero
+        default: return nil
         }
     }
 
-    public func handleHotKeyPressed(targetBundleID: String) {
-        actionQueue.async { [weak self] in
-            guard let self else { return }
-            guard !self.isRunningAction else {
-                NSLog("Pollyshot: action already running; ignoring hotkey press")
-                return
-            }
-            self.isRunningAction = true
-            defer { self.isRunningAction = false }
-
-            NSLog("Pollyshot: hotkey triggered — starting interactive screenshot")
-            let screenshotOK = self.runInteractiveScreenshotToClipboard()
-            if !screenshotOK {
-                NSLog("Pollyshot: screenshot command failed or was cancelled")
-                return
-            }
-
-            // Give the clipboard a brief moment to update before pasting.
-            Thread.sleep(forTimeInterval: 0.25)
-
-            self.activateApp(bundleID: targetBundleID)
-
-            // Wait longer for target app to become frontmost and ready for Cmd+V. Increase if paste sometimes fails.
-            Thread.sleep(forTimeInterval: 1.0)
-
-            self.paste()
+    /// Stable mapping: 1..9 map to ids 1..9, 0 maps to id 10.
+    private func hotKeyIDValueForSlot(_ slot: ShortcutSlot) -> UInt32 {
+        switch slot {
+        case .zero: return 10
+        default: return UInt32(slot.rawValue)
         }
+    }
+
+    private func keyCodeForSlot(_ slot: ShortcutSlot) -> UInt32 {
+        switch slot {
+        case .one: return UInt32(kVK_ANSI_1)
+        case .two: return UInt32(kVK_ANSI_2)
+        case .three: return UInt32(kVK_ANSI_3)
+        case .four: return UInt32(kVK_ANSI_4)
+        case .five: return UInt32(kVK_ANSI_5)
+        case .six: return UInt32(kVK_ANSI_6)
+        case .seven: return UInt32(kVK_ANSI_7)
+        case .eight: return UInt32(kVK_ANSI_8)
+        case .nine: return UInt32(kVK_ANSI_9)
+        case .zero: return UInt32(kVK_ANSI_0)
+        }
+    }
+
+    // MARK: Action pipeline
+
+    private func captureActivatePaste(targetBundleID: String) {
+        guard !isRunningAction else {
+            NSLog("Pollyshot: action already running; ignoring trigger")
+            return
+        }
+        isRunningAction = true
+        defer { isRunningAction = false }
+
+        NSLog("Pollyshot: hotkey/menu triggered — starting interactive screenshot")
+        let screenshotOK = runInteractiveScreenshotToClipboard()
+        if !screenshotOK {
+            NSLog("Pollyshot: screenshot command failed or was cancelled")
+            return
+        }
+
+        // Give the clipboard a brief moment to update before pasting.
+        Thread.sleep(forTimeInterval: 0.25)
+
+        activateApp(bundleID: targetBundleID)
+
+        // Give the app time to become frontmost and accept Cmd+V.
+        Thread.sleep(forTimeInterval: 0.8)
+
+        paste()
     }
 
     /// Runs macOS built-in interactive selection screenshot and copies to clipboard.
@@ -206,7 +289,8 @@ final class HotKeyManager {
         if process.terminationStatus != 0 {
             // If user cancels the interactive capture, macOS typically returns non-zero.
             let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            if let msg = String(data: data, encoding: .utf8), !msg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let msg = String(data: data, encoding: .utf8),
+               !msg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 NSLog("Pollyshot: screencapture error: \(msg)")
             }
             return false
@@ -215,51 +299,20 @@ final class HotKeyManager {
         return true
     }
 
-    private func activateNotes() {
-        // First try: open/activate Notes directly.
-        // (This avoids relying on scripting permissions just to bring the app forward.)
-        let notesURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Notes")
-        if let url = notesURL {
-            let configuration = NSWorkspace.OpenConfiguration()
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration, completionHandler: nil)
-        }
-
-        // Ensure it becomes frontmost.
-        DispatchQueue.main.async {
-            if let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Notes").first {
-                _ = running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-            }
-        }
-
-        // Also set activation policy in case the menu bar app is background-y.
-        DispatchQueue.main.async {
-            // Note: activateIgnoringOtherApps is deprecated on macOS 14,
-            // but still used here for compatibility.
-            NSApp.activate(ignoringOtherApps: true)
-        }
-    }
-
     private func activateApp(bundleID: String) {
-        // First try: open/activate app directly.
-        // (This avoids relying on scripting permissions just to bring the app forward.)
-        let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        if let url = appURL {
+        // Open if needed
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
             let configuration = NSWorkspace.OpenConfiguration()
             NSWorkspace.shared.openApplication(at: url, configuration: configuration, completionHandler: nil)
+        } else {
+            NSLog("Pollyshot: could not locate app for bundleID=\(bundleID)")
         }
 
-        // Ensure it becomes frontmost.
+        // Make frontmost if running
         DispatchQueue.main.async {
             if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
                 _ = running.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
             }
-        }
-
-        // Also set activation policy in case the menu bar app is background-y.
-        DispatchQueue.main.async {
-            // Note: activateIgnoringOtherApps is deprecated on macOS 14,
-            // but still used here for compatibility.
-            NSApp.activate(ignoringOtherApps: true)
         }
     }
 
@@ -279,8 +332,5 @@ final class HotKeyManager {
 
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
-
-        NSLog("Pollyshot: pasted into frontmost app (expected: target app)")
     }
 }
-
