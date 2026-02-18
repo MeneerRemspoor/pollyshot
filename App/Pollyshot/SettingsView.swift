@@ -237,6 +237,12 @@ private struct SlotDetailEditor: View {
 
                             Spacer()
 
+                            Button("Remove", role: .destructive) {
+                                onChange(nil)
+                                loadFromAssignment(nil)
+                            }
+                            .cursorOnHover(.pointingHand)
+
                             Toggle("Enabled", isOn: $isEnabled)
                                 .toggleStyle(.switch)
                         }
@@ -264,16 +270,7 @@ private struct SlotDetailEditor: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Divider()
 
-                        HStack {
-                            Spacer()
-                            Button("Clear slot", role: .destructive) {
-                                onChange(nil)
-                                loadFromAssignment(nil)
-                            }
-                            .cursorOnHover(.pointingHand)
-                        }
                     }
                 }
                 .padding(12)
