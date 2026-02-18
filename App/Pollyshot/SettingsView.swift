@@ -87,7 +87,9 @@ struct SettingsView: View {
                             }
                         )
                         .frame(maxWidth: UI.detailMaxWidth, alignment: .topLeading)
-                        .padding(16)
+                        .padding(.top, 12)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
                     }
 
                     HStack(spacing: 4) {
