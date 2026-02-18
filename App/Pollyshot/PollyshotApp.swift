@@ -60,15 +60,29 @@ private final class SettingsWindowController {
         if let titlebarView = window.standardWindowButton(.closeButton)?.superview {
             titlebarView.addSubview(titleView)
 
-            // Left-align in the titlebar, just to the right of the window controls.
-            if let closeButton = window.standardWindowButton(.closeButton) {
+            // Left-align in the titlebar, but leave enough space so it never overlaps
+            // the traffic-light window controls (and their active/inactive layout changes).
+            if let closeButton = window.standardWindowButton(.closeButton),
+               let minimizeButton = window.standardWindowButton(.miniaturizeButton),
+               let zoomButton = window.standardWindowButton(.zoomButton) {
+
+                // Use the right-most control (zoom) as the anchor and add padding.
                 NSLayoutConstraint.activate([
-                    titleView.leadingAnchor.constraint(equalTo: closeButton.trailingAnchor, constant: 10),
+                    titleView.leadingAnchor.constraint(equalTo: zoomButton.trailingAnchor, constant: 12),
                     titleView.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
                 ])
+
+                // Ensure the title doesn't intrude back into the controls area.
+                titleView.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+                titleView.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+                // Keep the standard buttons on top visually.
+                closeButton.superview?.addSubview(closeButton)
+                minimizeButton.superview?.addSubview(minimizeButton)
+                zoomButton.superview?.addSubview(zoomButton)
             } else {
                 NSLayoutConstraint.activate([
-                    titleView.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: 60),
+                    titleView.leadingAnchor.constraint(equalTo: titlebarView.leadingAnchor, constant: 84),
                     titleView.centerYAnchor.constraint(equalTo: titlebarView.centerYAnchor),
                 ])
             }
