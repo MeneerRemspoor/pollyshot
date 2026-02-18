@@ -10,50 +10,11 @@
 /// - Screen Recording: may be required for `screencapture` on newer macOS versions.
 /// - Accessibility: required to synthesize Cmd+V into the target app.
 ///
-/// Note:
-/// This file intentionally contains lightweight models (`ShortcutSlot`, `SlotAssignment`) so it can
-/// operate independently. If you already define these elsewhere, keep the definitions consistent.
-
 import Foundation
 import AppKit
 import Carbon.HIToolbox
 
-// MARK: - Slot Models (kept in sync with Settings)
-
-enum ShortcutSlot: Int, CaseIterable, Identifiable, Codable, Equatable {
-    case one = 1
-    case two = 2
-    case three = 3
-    case four = 4
-    case five = 5
-    case six = 6
-    case seven = 7
-    case eight = 8
-    case nine = 9
-    case zero = 0
-
-    var id: Int { rawValue }
-
-    static let allInHotkeyOrder: [ShortcutSlot] = [.one, .two, .three, .four, .five, .six, .seven, .eight, .nine, .zero]
-
-    var displayNumber: String {
-        switch self {
-        case .zero: return "0"
-        default: return String(rawValue)
-        }
-    }
-}
-
-struct SlotAssignment: Identifiable, Codable, Equatable {
-    var id: ShortcutSlot { slot }
-    var slot: ShortcutSlot
-    var name: String
-    var bundleID: String
-    var isEnabled: Bool = true
-    var isMissing: Bool = false
-}
-
-// MARK: - HotKeyManager
+// Slot models are defined in `Models/Slots.swift` and shared with the UI/persistence.
 
 final class HotKeyManager {
     static let shared = HotKeyManager()
