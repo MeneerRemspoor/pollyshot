@@ -10,6 +10,8 @@
 //
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var store: SlotStore
@@ -111,6 +113,8 @@ private struct SlotEditor: View {
 
     @State private var validationMessage: String? = nil
 
+    private var isMissing: Bool { assignment?.isMissing == true }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
@@ -131,10 +135,19 @@ private struct SlotEditor: View {
                         .disableAutocorrection(true)
                         .onChange(of: bundleID) { _ in pushUpdate() }
 
-                    Toggle("Enabled", isOn: $isEnabled)
-                        .onChange(of: isEnabled) { _ in pushUpdate() }
-
                     HStack {
+                        Button(isMissing ? "Relink App…" : "Choose App…") {
+                            pickAppAndAutofill()
+                        }
+
+                        if isMissing {
+                            Text("Missing")
+                                .font(.callout)
+                                .foregroundStyle(.orange)
+                        }
+
+                        Spacer()
+
                         Button("Test capture") {
                             guard !bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                                 validationMessage = "Bundle ID is required to test."
@@ -142,7 +155,12 @@ private struct SlotEditor: View {
                             }
                             HotKeyManager.shared.handleHotKeyPressed(targetBundleID: bundleID)
                         }
+                    }
 
+                    Toggle("Enabled", isOn: $isEnabled)
+                        .onChange(of: isEnabled) { _ in pushUpdate() }
+
+                    HStack {
                         Button("Clear slot") {
                             onChange(nil)
                             loadFromAssignment(nil)
@@ -248,5 +266,42 @@ private struct SlotEditor: View {
                 isMissing: false
             )
         )
+    }
+
+    private func pickAppAndAutofill() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.prompt = "Choose"
+
+        let response = panel.runModal()
+        guard response == .OK, let url = panel.url else { return }
+
+        guard let bundle = Bundle(url: url) else {
+            validationMessage = "Could not read app bundle."
+            return
+        }
+
+        guard let pickedBundleID = bundle.bundleIdentifier, !pickedBundleID.isEmpty else {
+            validationMessage = "Selected app has no bundle identifier."
+            return
+        }
+
+        // Friendly name
+        let info = bundle.infoDictionary
+        let displayName =
+            (info?["CFBundleDisplayName"] as? String) ??
+            (info?["CFBundleName"] as? String) ??
+            url.deletingPathExtension().lastPathComponent
+
+        // Update fields
+        name = displayName
+        bundleID = pickedBundleID
+        validationMessage = nil
+
+        // Persist immediately
+        pushUpdate()
     }
 }
