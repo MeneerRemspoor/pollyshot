@@ -43,8 +43,8 @@ private final class SettingsWindowController {
         let window = NSWindow(contentViewController: hosting)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        // 10 fixed slots: compact default height (still enough to avoid sidebar scrolling on typical setups).
-        window.setContentSize(NSSize(width: 680, height: 440))
+        // 10 fixed slots: tighter default height to match the sidebar content and reduce whitespace.
+        window.setContentSize(NSSize(width: 680, height: 380))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.center()
