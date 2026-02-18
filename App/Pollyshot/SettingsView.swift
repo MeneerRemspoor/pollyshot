@@ -15,6 +15,20 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+private extension View {
+    /// Apple-like behavior: show pointing-hand for clickable things (buttons/rows/links),
+    /// keep default cursors for text fields, etc.
+    func cursorOnHover(_ cursor: NSCursor) -> some View {
+        onHover { hovering in
+            if hovering {
+                cursor.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
 private enum UI {
     static let sidebarMinWidth: CGFloat = 240
     static let detailMaxWidth: CGFloat = 560
@@ -39,6 +53,7 @@ struct SettingsView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .cursorOnHover(.pointingHand)
                 .tag(slot as ShortcutSlot?)
             }
             .onChange(of: selection) { newSelection in
@@ -78,6 +93,7 @@ struct SettingsView: View {
                     HStack(spacing: 4) {
                         Text("©")
                         Link("Jeroen", destination: URL(string: "https://www.pollpoll.nl")!)
+                            .cursorOnHover(.pointingHand)
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -95,6 +111,7 @@ struct SettingsView: View {
                     HStack(spacing: 4) {
                         Text("©")
                         Link("Jeroen", destination: URL(string: "https://www.pollpoll.nl")!)
+                            .cursorOnHover(.pointingHand)
                     }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -166,11 +183,6 @@ private struct SlotSidebarRow: View {
         .contentShape(Rectangle())
         .onHover { hovering in
             isHovering = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
         }
     }
 }
@@ -200,6 +212,7 @@ private struct SlotDetailEditor: View {
                         Button("Choose App…") {
                             pickAppAndAutofill()
                         }
+                        .cursorOnHover(.pointingHand)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         // Actions row first
@@ -207,6 +220,7 @@ private struct SlotDetailEditor: View {
                             Button(isMissing ? "Relink App…" : "Choose App…") {
                                 pickAppAndAutofill()
                             }
+                            .cursorOnHover(.pointingHand)
 
                             Button("Test") {
                                 let trimmed = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -216,6 +230,7 @@ private struct SlotDetailEditor: View {
                                 }
                                 HotKeyManager.shared.handleHotKeyPressed(targetBundleID: trimmed)
                             }
+                            .cursorOnHover(.pointingHand)
                             .disabled(bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                             Spacer()
@@ -255,6 +270,7 @@ private struct SlotDetailEditor: View {
                                 onChange(nil)
                                 loadFromAssignment(nil)
                             }
+                            .cursorOnHover(.pointingHand)
                         }
                     }
                 }
@@ -278,11 +294,7 @@ private struct SlotDetailEditor: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(slot.shortcutHint)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-        }
+        EmptyView()
     }
 
     private func loadFromAssignment(_ a: SlotAssignment?) {
