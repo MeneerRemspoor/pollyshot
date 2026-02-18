@@ -221,6 +221,16 @@ private struct SlotDetailEditor: View {
                 }
                 .padding(12)
             }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 4) {
+                Text("©")
+                Link("Jeroen", destination: URL(string: "https://www.pollpoll.nl")!)
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .onAppear { loadFromAssignment(assignment) }
         .onChange(of: assignment) { newValue in
