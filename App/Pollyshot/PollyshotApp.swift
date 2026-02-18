@@ -83,7 +83,7 @@ struct PollyshotApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("Pollyshot", systemImage: "sparkles") {
+        MenuBarExtra("Pollyshot", image: "MenuBarIcon") {
             HotkeySyncView()
                 .environmentObject(slotStore)
 
