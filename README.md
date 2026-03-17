@@ -6,6 +6,11 @@ No copy. No paste. No friction.
 
 The goal is to make screenshots feel like a first-class input — fast, disposable, and easy to route anywhere.
 
+<img width="256" height="244" alt="afbeelding" src="https://github.com/user-attachments/assets/e64f8406-9007-401b-b61f-ed4ceb930d42" />
+
+<img width="690" height="425" alt="afbeelding" src="https://github.com/user-attachments/assets/ca977637-906c-4b8c-810e-e2ccf33b5536" />
+
+
 ## Status
 
 Early work in progress.  
@@ -25,3 +30,4 @@ Pollyshot is currently focused on getting the fundamentals right:
 - staying out of the way
 
 More functionality will come later.
+
