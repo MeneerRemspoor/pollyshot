@@ -20,20 +20,21 @@ Pollyshot eliminates those steps. One shortcut, one selection, done.
 
 ## Getting started
 
-### Installation
-1. Download and install Pollyshot on macOS
-2. Grant the required permissions:
+1. [Download Pollyshot](https://github.com/MeneerRemspoor/pollyshot/releases/latest)
+2. Unpack the zip file
+3. Move **Pollyshot.app** to your Applications folder
+4. Grant the required permissions:
    - Go to *System Settings > Privacy & Security > Accessibility* and add Pollyshot
    - Go to *System Settings > Privacy & Security > Screen & System Audio Recording* and add Pollyshot
+5. From the menu bar, open *Pollyshot > Settings* and add the apps you want to send screenshots to (up to 10)
+6. Navigate to your target app and make sure an input field is focused
+7. Use the assigned shortcut or select an app from the menu bar dropdown to capture and paste in one go
 
 <img width="400" alt="Pollyshot settings - Accessibility" src="https://github.com/user-attachments/assets/619e4c16-8833-471e-8054-42339749b27b" />
 <img width="400" alt="Pollyshot settings - Screen and System Audio Recording" src="https://github.com/user-attachments/assets/e61d27b0-c9a5-4e4f-9205-d1168101a6b1" />
 
 ## Supported apps
-Pollyshot has been tested with the following apps:
-ChatGPT, Claude, Slack, Figma, WhatsApp, Viber, Cursor, Zed, Apple Notes, Apple Pages
-
-Other applications may work too — support will broaden as development continues.
+Pollyshot has been tested with the following apps: ChatGPT, Claude, Slack, Figma, WhatsApp, Viber, Cursor, Zed, Apple Notes, Apple Pages. Other applications may work too — support will broaden as development continues.
 
 ## Status
 Pollyshot is currently in beta. More functionality is on the way. If you run into issues with a specific app, please open an issue.
