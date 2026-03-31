@@ -8,7 +8,9 @@ No copy. No paste. No friction.
 
 The goal is to make screenshots feel like a first-class input — fast, disposable, and easy to route anywhere.
 
-<img width="256" height="244" alt="afbeelding" src="https://github.com/user-attachments/assets/e64f8406-9007-401b-b61f-ed4ceb930d42" />
+![pollyshot-small](https://github.com/user-attachments/assets/77699573-8688-40b2-8e83-5b0a66583592)
+
+Link up to 10 of your favorite apps.
 
 <img width="690" height="425" alt="afbeelding" src="https://github.com/user-attachments/assets/ca977637-906c-4b8c-810e-e2ccf33b5536" />
 
