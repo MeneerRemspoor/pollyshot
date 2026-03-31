@@ -2,7 +2,7 @@
 
 *No copy. No paste. No friction.*
 
-![pollyshot-small](https://github.com/user-attachments/assets/77699573-8688-40b2-8e83-5b0a66583592)
+![pollyshot-mid2](https://github.com/user-attachments/assets/26dcddf5-90eb-4bd2-b5cd-745ddcbcb7b3)
 
 ## The problem
 
