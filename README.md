@@ -20,7 +20,7 @@ Pollyshot eliminates those steps. One shortcut, one selection, done.
 
 ## Getting started
 
-1. [Download Pollyshot](https://github.com/MeneerRemspoor/pollyshot/releases/latest)
+1. [Download Pollyshot](https://github.com/jvanderpoll/pollyshot/releases/latest)
 2. Unpack the zip file
 3. Move **Pollyshot.app** to your Applications folder
 4. Grant the required permissions:
